@@ -16,18 +16,26 @@ defmodule Server do
     {:ok, socket} = :gen_tcp.listen(4221, [:binary, active: false, reuseaddr: true])
     {:ok, client} = :gen_tcp.accept(socket)
 
-    {:ok, line} = :gen_tcp.recv(client, 0)
+    {:ok, http_request} = :gen_tcp.recv(client, 0)
 
-    [_http_method, url, _http_version] =
-      line
-      |> String.split("\r\n")
-      |> List.first()
-      |> String.split(" ")
+    [request_line, headers, _request_body] = parse_request(http_request)
+    [_http_method, url, _http_version] = parse_request_line(request_line)
 
     response =
       case url do
         "/" ->
           "HTTP/1.1 200 OK\r\n\r\n"
+
+        "/user-agent" ->
+          user_agent = parse_user_agent(headers)
+
+          """
+          HTTP/1.1 200 OK\r
+          Content-Type: text/plain\r
+          Content-Length: #{byte_size(user_agent)}\r
+          \r
+          #{user_agent}\r\n
+          """
 
         "/echo/" <> str ->
           """
@@ -43,6 +51,35 @@ defmodule Server do
       end
 
     :gen_tcp.send(client, response)
+  end
+
+  defp parse_request(http_request) do
+    [request_line_and_headers, body] =
+      http_request
+      |> String.split("\r\n\r\n")
+
+    [request_line | headers] =
+      request_line_and_headers
+      |> String.split("\r\n")
+
+    [request_line, headers, body]
+  end
+
+  defp parse_user_agent(headers) do
+    user_agent_line =
+      headers
+      |> Enum.find("", fn header ->
+        String.starts_with?(header, "User-Agent:")
+      end)
+
+    user_agent_line
+    |> String.replace_prefix("User-Agent: ", "")
+    |> String.trim()
+  end
+
+  defp parse_request_line(request_line) do
+    request_line
+    |> String.split(" ")
   end
 end
 

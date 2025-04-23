@@ -16,7 +16,23 @@ defmodule Server do
     {:ok, socket} = :gen_tcp.listen(4221, [:binary, active: false, reuseaddr: true])
     {:ok, client} = :gen_tcp.accept(socket)
 
-    response = "HTTP/1.1 200 OK\r\n\r\n"
+    {:ok, line} = :gen_tcp.recv(client, 0)
+
+    [_http_method, url, _http_version] =
+      line
+      |> String.split("\r\n")
+      |> List.first()
+      |> String.split(" ")
+
+    response =
+      case url do
+        "/abcdefg" ->
+          "HTTP/1.1 404 Not Found\r\n\r\n"
+
+        "/" ->
+          "HTTP/1.1 200 OK\r\n\r\n"
+      end
+
     :gen_tcp.send(client, response)
   end
 end

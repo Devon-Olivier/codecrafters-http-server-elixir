@@ -26,11 +26,11 @@ defmodule Server do
 
     response =
       case url do
-        "/abcdefg" ->
-          "HTTP/1.1 404 Not Found\r\n\r\n"
-
         "/" ->
           "HTTP/1.1 200 OK\r\n\r\n"
+
+        _ ->
+          "HTTP/1.1 404 Not Found\r\n\r\n"
       end
 
     :gen_tcp.send(client, response)

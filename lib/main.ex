@@ -29,6 +29,15 @@ defmodule Server do
         "/" ->
           "HTTP/1.1 200 OK\r\n\r\n"
 
+        "/echo/" <> str ->
+          """
+          HTTP/1.1 200 OK\r
+          Content-Type: text/plain\r
+          Content-Length: #{byte_size(str)}\r
+          \r
+          #{str}\r\n
+          """
+
         _ ->
           "HTTP/1.1 404 Not Found\r\n\r\n"
       end

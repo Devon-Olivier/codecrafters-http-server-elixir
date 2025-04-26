@@ -36,6 +36,7 @@ defmodule Server.HTTPListener do
   end
 
   defp handle(socket) do
+    # TODO: handle errors
     DynamicSupervisor.start_child(
       Server.RequestHandlerSupervisor,
       {Server.RequestHandler, socket}
@@ -51,6 +52,8 @@ defmodule Server.RequestHandler do
   end
 
   def handle(socket) do
+    directory = Application.get_env(:codecrafters_http_server, :directory)
+
     {:ok, raw_request} = :gen_tcp.recv(socket, 0)
 
     [request_line, headers, _request_body] = parse_request(raw_request)
@@ -84,6 +87,27 @@ defmodule Server.RequestHandler do
           \r
           #{str}\
           """
+
+        "/files/" <> filename ->
+          file_path = Path.join(directory, filename)
+
+          case File.read(file_path) do
+            {:ok, body} ->
+              """
+              HTTP/1.1 200 OK\r
+              Content-Type: application/octet-stream\r
+              Content-Length: #{byte_size(body)}\r
+              \r
+              #{body}\
+              """
+
+            {:error, :enoent} ->
+              """
+              HTTP/1.1 404 Not Found\r
+              Content-Length: 0\r
+              \r
+              """
+          end
 
         _ ->
           """
@@ -127,7 +151,15 @@ defmodule Server.RequestHandler do
 end
 
 defmodule CLI do
-  def main(_args) do
+  def main(args) do
+    {parsed, _remaining, _invalid} = OptionParser.parse(args, strict: [directory: :string])
+
+    Application.put_env(
+      :codecrafters_http_server,
+      :directory,
+      parsed[:directory]
+    )
+
     # Start the Server application
     {:ok, _pid} = Application.ensure_all_started(:codecrafters_http_server)
 

@@ -1,30 +1,69 @@
 defmodule Server do
   use Application
 
+  @port 4221
+
   def start(_type, _args) do
-    Supervisor.start_link([{Task, fn -> Server.listen() end}], strategy: :one_for_one)
+    children = [
+      {DynamicSupervisor, name: Server.RequestHandlerSupervisor, strategy: :one_for_one},
+      {Server.HTTPListener, @port}
+    ]
+
+    Supervisor.start_link(
+      children,
+      strategy: :one_for_one
+    )
+  end
+end
+
+defmodule Server.HTTPListener do
+  use Task
+
+  def start_link(port) when is_integer(port) do
+    Task.start_link(__MODULE__, :listen, [port])
   end
 
-  def listen() do
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    IO.puts("Logs from your program will appear here!")
+  def listen(port \\ 4221) do
+    {:ok, socket} = :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true])
+    IO.puts("Server listening on port #{port}")
+    accept_loop(socket)
+  end
 
-    # Uncomment this block to pass the first stage
-    #
-    # Since the tester restarts your program quite often, setting SO_REUSEADDR
-    # ensures that we don't run into 'Address already in use' errors
-    {:ok, socket} = :gen_tcp.listen(4221, [:binary, active: false, reuseaddr: true])
+  defp accept_loop(socket) do
     {:ok, client} = :gen_tcp.accept(socket)
+    handle(client)
+    accept_loop(socket)
+  end
 
-    {:ok, http_request} = :gen_tcp.recv(client, 0)
+  defp handle(socket) do
+    DynamicSupervisor.start_child(
+      Server.RequestHandlerSupervisor,
+      {Server.RequestHandler, socket}
+    )
+  end
+end
 
-    [request_line, headers, _request_body] = parse_request(http_request)
+defmodule Server.RequestHandler do
+  use Task
+
+  def start_link(socket) do
+    Task.start_link(__MODULE__, :handle, [socket])
+  end
+
+  def handle(socket) do
+    {:ok, raw_request} = :gen_tcp.recv(socket, 0)
+
+    [request_line, headers, _request_body] = parse_request(raw_request)
     [_http_method, url, _http_version] = parse_request_line(request_line)
 
     response =
       case url do
         "/" ->
-          "HTTP/1.1 200 OK\r\n\r\n"
+          """
+          HTTP/1.1 200 OK\r
+          Content-Length: 0\r
+          \r
+          """
 
         "/user-agent" ->
           user_agent = parse_user_agent(headers)
@@ -34,7 +73,7 @@ defmodule Server do
           Content-Type: text/plain\r
           Content-Length: #{byte_size(user_agent)}\r
           \r
-          #{user_agent}\r\n
+          #{user_agent}\
           """
 
         "/echo/" <> str ->
@@ -43,14 +82,18 @@ defmodule Server do
           Content-Type: text/plain\r
           Content-Length: #{byte_size(str)}\r
           \r
-          #{str}\r\n
+          #{str}\
           """
 
         _ ->
-          "HTTP/1.1 404 Not Found\r\n\r\n"
+          """
+          HTTP/1.1 404 Not Found\r
+          Content-Length: 0\r
+          \r
+          """
       end
 
-    :gen_tcp.send(client, response)
+    :gen_tcp.send(socket, response)
   end
 
   defp parse_request(http_request) do

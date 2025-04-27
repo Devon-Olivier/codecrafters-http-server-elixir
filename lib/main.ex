@@ -172,22 +172,37 @@ defmodule Server.RequestHandler do
   end
 
   defp response(%HTTPRequest{
-         accept_encoding: "gzip",
+         accept_encoding: accept_encoding,
          method: "GET",
          url: "/echo/" <> str
-       }) do
-    """
-    HTTP/1.1 200 OK\r
-    Content-Encoding: gzip\r
-    Content-Type: text/plain\r
-    Content-Length: #{byte_size(str)}\r
-    \r
-    #{str}\
-    """
+       })
+       when not is_nil(accept_encoding) do
+    encodings =
+      accept_encoding
+      |> String.split(",")
+      |> MapSet.new(&String.trim/1)
+
+    if MapSet.member?(encodings, "gzip") do
+      """
+      HTTP/1.1 200 OK\r
+      Content-Encoding: gzip\r
+      Content-Type: text/plain\r
+      Content-Length: #{byte_size(str)}\r
+      \r
+      #{str}\
+      """
+    else
+      """
+      HTTP/1.1 200 OK\r
+      Content-Type: text/plain\r
+      Content-Length: #{byte_size(str)}\r
+      \r
+      #{str}\
+      """
+    end
   end
 
   defp response(%HTTPRequest{
-         accept_encoding: _,
          method: "GET",
          url: "/echo/" <> str
        }) do

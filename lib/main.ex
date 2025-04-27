@@ -183,13 +183,15 @@ defmodule Server.RequestHandler do
       |> MapSet.new(&String.trim/1)
 
     if MapSet.member?(encodings, "gzip") do
+      str_gz = :zlib.gzip(str)
+
       """
       HTTP/1.1 200 OK\r
       Content-Encoding: gzip\r
       Content-Type: text/plain\r
-      Content-Length: #{byte_size(str)}\r
+      Content-Length: #{byte_size(str_gz)}\r
       \r
-      #{str}\
+      #{str_gz}\
       """
     else
       """

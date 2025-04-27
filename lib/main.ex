@@ -47,6 +47,7 @@ defmodule Server.HTTPRequest do
   @enforce_keys ~w[raw_request]a
   defstruct ~w[
     accept
+    accept_encoding
     body
     content_length
     content_type
@@ -65,6 +66,17 @@ defmodule Server.HTTPRequest do
     |> Enum.reduce(req, fn header, acc_req ->
       parse_header(acc_req, header)
     end)
+  end
+
+  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, "Accept: " <> accept) do
+    %__MODULE__{req | accept: accept}
+  end
+
+  defp parse_header(
+         %__MODULE__{raw_headers: _raw_headers} = req,
+         "Accept-Encoding: " <> accept_encoding
+       ) do
+    %__MODULE__{req | accept_encoding: accept_encoding}
   end
 
   defp parse_header(
@@ -87,10 +99,6 @@ defmodule Server.HTTPRequest do
 
   defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, "User-Agent: " <> user_agent) do
     %__MODULE__{req | user_agent: user_agent}
-  end
-
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, "Accept: " <> accept) do
-    %__MODULE__{req | accept: accept}
   end
 
   def parse_request_line(%__MODULE__{raw_request: raw_request} = req) do
@@ -164,6 +172,22 @@ defmodule Server.RequestHandler do
   end
 
   defp response(%HTTPRequest{
+         accept_encoding: "gzip",
+         method: "GET",
+         url: "/echo/" <> str
+       }) do
+    """
+    HTTP/1.1 200 OK\r
+    Content-Encoding: gzip\r
+    Content-Type: text/plain\r
+    Content-Length: #{byte_size(str)}\r
+    \r
+    #{str}\
+    """
+  end
+
+  defp response(%HTTPRequest{
+         accept_encoding: _,
          method: "GET",
          url: "/echo/" <> str
        }) do

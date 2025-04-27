@@ -5,6 +5,7 @@ defmodule Server do
 
   def start(_type, _args) do
     children = [
+      {DynamicSupervisor, name: Server.ConnectionHandlerSupervisor, strategy: :one_for_one},
       {DynamicSupervisor, name: Server.RequestHandlerSupervisor, strategy: :one_for_one},
       {Server.HTTPListener, @port}
     ]
@@ -37,8 +38,8 @@ defmodule Server.HTTPListener do
 
   defp handle(socket) do
     DynamicSupervisor.start_child(
-      Server.RequestHandlerSupervisor,
-      {Server.RequestHandler, socket}
+      Server.ConnectionHandlerSupervisor,
+      {Server.ConnectionHandler, socket}
     )
   end
 end
@@ -128,10 +129,8 @@ defmodule Server.HTTPRequest do
   end
 end
 
-defmodule Server.RequestHandler do
+defmodule Server.ConnectionHandler do
   use Task
-
-  alias Server.HTTPRequest
 
   def start_link(socket) do
     Task.start_link(__MODULE__, :handle, [socket])
@@ -139,7 +138,33 @@ defmodule Server.RequestHandler do
 
   def handle(socket) do
     # TODO: handle errors
-    {:ok, raw_request} = :gen_tcp.recv(socket, 0)
+    case :gen_tcp.recv(socket, 0) do
+      {:ok, raw_request} ->
+        DynamicSupervisor.start_child(
+          Server.RequestHandlerSupervisor,
+          {Server.RequestHandler, %{raw_request: raw_request, socket: socket}}
+        )
+
+        handle(socket)
+
+      {:error, :closed} ->
+        :ok
+    end
+  end
+end
+
+defmodule Server.RequestHandler do
+  use Task
+
+  alias Server.HTTPRequest
+
+  def start_link(%{raw_request: _raw_request, socket: _socket} = request) do
+    Task.start_link(__MODULE__, :handle, [request])
+  end
+
+  def handle(%{raw_request: raw_request, socket: socket}) do
+    # TODO: handle errors
+    # {:ok, raw_request} = :gen_tcp.recv(socket, 0)
 
     req =
       %HTTPRequest{raw_request: raw_request}

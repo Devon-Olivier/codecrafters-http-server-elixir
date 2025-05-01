@@ -190,10 +190,7 @@ defmodule Server.HTTPResponse do
       if headers == [] do
         status_line
       else
-        headers_string =
-          headers
-          |> Enum.map(&header_to_string/1)
-          |> Enum.join("\r\n")
+        headers_string = Enum.map_join(headers, "\r\n", &header_to_string/1)
 
         """
         #{status_line}\r

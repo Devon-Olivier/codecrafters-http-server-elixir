@@ -71,48 +71,55 @@ defmodule Server.HTTPRequest do
   def parse_headers(%__MODULE__{raw_headers: raw_headers} = req) do
     raw_headers
     |> Enum.reduce(req, fn header, acc_req ->
-      parse_header(acc_req, header)
+      [name, value] =
+        header
+        |> String.split(":", parts: 2)
+        |> Enum.map(&String.trim/1)
+
+      parse_header(acc_req, %{name: String.downcase(name), value: value})
     end)
   end
 
-  # TODO: Fix - this is brittle. Header keys are case-insensitive. A possible fix is to downcase before calling and have parse_header/2 accept only lowercase strings
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, "Accept: " <> accept) do
+  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{name: "accept", value: accept}) do
     %__MODULE__{req | accept: accept}
   end
 
-  defp parse_header(
-         %__MODULE__{raw_headers: _raw_headers} = req,
-         "Accept-Encoding: " <> accept_encoding
-       ) do
+  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{
+         name: "accept-encoding",
+         value: accept_encoding
+       }) do
     %__MODULE__{req | accept_encoding: accept_encoding}
   end
 
   defp parse_header(
          %__MODULE__{raw_headers: _raw_headers} = req,
-         "Connection: " <> connection
+         %{name: "connection", value: connection}
        ) do
     %__MODULE__{req | connection: connection}
   end
 
   defp parse_header(
          %__MODULE__{raw_headers: _raw_headers} = req,
-         "Content-Length: " <> content_length
+         %{name: "content-length", value: content_length}
        ) do
     %__MODULE__{req | content_length: content_length}
   end
 
   defp parse_header(
          %__MODULE__{raw_headers: _raw_headers} = req,
-         "Content-Type: " <> content_type
+         %{name: "content-type", value: content_type}
        ) do
     %__MODULE__{req | content_type: content_type}
   end
 
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, "Host: " <> host) do
+  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{name: "host", value: host}) do
     %__MODULE__{req | host: host}
   end
 
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, "User-Agent: " <> user_agent) do
+  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{
+         name: "user-agent",
+         value: user_agent
+       }) do
     %__MODULE__{req | user_agent: user_agent}
   end
 

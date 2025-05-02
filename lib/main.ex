@@ -177,6 +177,18 @@ defmodule Server.HTTPResponse do
     do_put_header(res, :date, value)
   end
 
+  def new(status_code) when is_integer(status_code) do
+    %__MODULE__{status_code: status_code, status_text: status_text(status_code)}
+  end
+
+  def status_text(status_code) when is_integer(status_code) do
+    %{
+      200 => "OK",
+      201 => "Created",
+      404 => "Not Found"
+    }[status_code]
+  end
+
   defp do_put_header(%__MODULE__{headers: headers} = res, key, value) do
     new_headers = Keyword.put(headers, key, value)
     %__MODULE__{res | headers: new_headers}
@@ -281,10 +293,7 @@ defmodule Server.RequestHandler do
   end
 
   defp response(%HTTPRequest{body: _body, connection: connection, method: "GET", url: "/"}) do
-    %HTTPResponse{
-      status_code: 200,
-      status_text: "OK"
-    }
+    HTTPResponse.new(200)
     |> HTTPResponse.put_header(:connection, connection)
   end
 
@@ -294,10 +303,7 @@ defmodule Server.RequestHandler do
          url: "/user-agent",
          user_agent: user_agent
        }) do
-    %HTTPResponse{
-      status_code: 200,
-      status_text: "OK"
-    }
+    HTTPResponse.new(200)
     |> HTTPResponse.put_body(user_agent)
     |> HTTPResponse.put_header(:connection, connection)
     |> HTTPResponse.put_header(:content_type, "text/plain")
@@ -319,18 +325,12 @@ defmodule Server.RequestHandler do
       if MapSet.member?(encodings, "gzip") do
         str_gz = :zlib.gzip(str)
 
-        %HTTPResponse{
-          status_code: 200,
-          status_text: "OK"
-        }
+        HTTPResponse.new(200)
         |> HTTPResponse.put_body(str_gz)
         |> HTTPResponse.put_header(:content_length, byte_size(str_gz))
         |> HTTPResponse.put_header(:content_encoding, "gzip")
       else
-        %HTTPResponse{
-          status_code: 200,
-          status_text: "OK"
-        }
+        HTTPResponse.new(200)
         |> HTTPResponse.put_body(str)
         |> HTTPResponse.put_header(:content_length, byte_size(str))
       end
@@ -351,19 +351,13 @@ defmodule Server.RequestHandler do
     res =
       case File.read(file_path) do
         {:ok, body} ->
-          %HTTPResponse{
-            status_code: 200,
-            status_text: "OK"
-          }
+          HTTPResponse.new(200)
           |> HTTPResponse.put_body(body)
           |> HTTPResponse.put_header(:content_type, "application/octet-stream")
           |> HTTPResponse.put_header(:content_length, byte_size(body))
 
         {:error, :enoent} ->
-          %HTTPResponse{
-            status_code: 404,
-            status_text: "Not Found"
-          }
+          HTTPResponse.new(404)
       end
 
     res
@@ -382,18 +376,12 @@ defmodule Server.RequestHandler do
     # TODO: handle errors
     File.write(file_path, body)
 
-    %HTTPResponse{
-      status_code: 201,
-      status_text: "Created"
-    }
+    HTTPResponse.new(201)
     |> HTTPResponse.put_header(:connection, connection)
   end
 
   defp response(%HTTPRequest{connection: connection}) do
-    %HTTPResponse{
-      status_code: 404,
-      status_text: "Not Found"
-    }
+    HTTPResponse.new(404)
     |> HTTPResponse.put_header(:connection, connection)
   end
 end

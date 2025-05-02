@@ -103,6 +103,25 @@ defmodule Server.HTTPRequest do
     end)
   end
 
+  def parse_request_line(%__MODULE__{raw_request: raw_request} = req) do
+    [head, body] = String.split(raw_request, "\r\n\r\n")
+
+    [raw_request_line | raw_headers] = String.split(head, "\r\n", trim: true)
+
+    [method, url, http_version] = String.split(raw_request_line, " ", trim: true)
+
+    method = String.upcase(method)
+    http_version = String.upcase(http_version)
+
+    req
+    |> put(:raw_request_line, raw_request_line)
+    |> put(:raw_headers, raw_headers)
+    |> put(:body, body)
+    |> put(:method, method)
+    |> put(:url, url)
+    |> put(:http_version, http_version)
+  end
+
   def put(
         %__MODULE__{raw_headers: _raw_headers} = req,
         :header,
@@ -138,25 +157,6 @@ defmodule Server.HTTPRequest do
 
   def put(%__MODULE__{} = req, key, value) when key in @http_request_keys do
     struct(req, %{key => value})
-  end
-
-  def parse_request_line(%__MODULE__{raw_request: raw_request} = req) do
-    [head, body] = String.split(raw_request, "\r\n\r\n")
-
-    [raw_request_line | raw_headers] = String.split(head, "\r\n", trim: true)
-
-    [method, url, http_version] = String.split(raw_request_line, " ", trim: true)
-
-    method = String.upcase(method)
-    http_version = String.upcase(http_version)
-
-    req
-    |> put(:raw_request_line, raw_request_line)
-    |> put(:raw_headers, raw_headers)
-    |> put(:body, body)
-    |> put(:method, method)
-    |> put(:url, url)
-    |> put(:http_version, http_version)
   end
 end
 

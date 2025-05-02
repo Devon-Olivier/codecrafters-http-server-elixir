@@ -117,17 +117,11 @@ defmodule Server.HTTPRequest do
   end
 
   def parse_request_line(%__MODULE__{raw_request: raw_request} = req) do
-    [request_line_and_headers, body] =
-      raw_request
-      |> String.split("\r\n\r\n")
+    [head, body] = String.split(raw_request, "\r\n\r\n")
 
-    [raw_request_line | raw_headers] =
-      request_line_and_headers
-      |> String.split("\r\n", trim: true)
+    [raw_request_line | raw_headers] = String.split(head, "\r\n", trim: true)
 
-    [method, url, http_version] =
-      raw_request_line
-      |> String.split(" ", trim: true)
+    [method, url, http_version] = String.split(raw_request_line, " ", trim: true)
 
     method = String.upcase(method)
     http_version = String.upcase(http_version)

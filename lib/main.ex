@@ -49,78 +49,92 @@ defmodule Server.HTTPListener do
 end
 
 defmodule Server.HTTPRequest do
-  # TODO: combine all headers into one `headers` keyword list
   @enforce_keys ~w[raw_request]a
-  defstruct [
-    :accept,
-    :content_type,
-    :host,
+  @http_request_keys [
+    :body,
     :http_version,
     :method,
     :raw_headers,
     :raw_request,
     :raw_request_line,
     :url,
-    :user_agent,
-    accept_encoding: "",
-    body: "",
-    content_length: 0,
-    connection: "Keep-Alive"
+    headers: [
+      "accept-encoding": "",
+      connection: "Keep-Alive",
+      "content-length": 0
+    ]
   ]
+
+  defstruct @http_request_keys
+
+  @accepted_header_names ~w[
+    accept
+    accept-encoding
+    connection
+    content-length
+    content-type
+    host
+    user-agent
+  ]
+
+  def get(%__MODULE__{} = req, :header, name) do
+    req.headers[name]
+  end
+
+  def new(raw_request) do
+    %__MODULE__{
+      body: "",
+      raw_request: raw_request
+    }
+  end
 
   def parse_headers(%__MODULE__{raw_headers: raw_headers} = req) do
     raw_headers
-    |> Enum.reduce(req, fn header, acc_req ->
+    |> Enum.reduce(req, fn raw_header, acc_req ->
       [name, value] =
-        header
+        raw_header
         |> String.split(":", parts: 2)
         |> Enum.map(&String.trim/1)
 
-      parse_header(acc_req, %{name: String.downcase(name), value: value})
+      put(acc_req, :header, String.downcase(name), value)
     end)
   end
 
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{name: "accept", value: accept}) do
-    %__MODULE__{req | accept: accept}
+  def put(
+        %__MODULE__{raw_headers: _raw_headers} = req,
+        :header,
+        name,
+        value
+      )
+      when name in @accepted_header_names do
+    atomized_name = String.to_atom(name)
+    put(req, :header, atomized_name, value)
   end
 
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{
-         name: "accept-encoding",
-         value: accept_encoding
-       }) do
-    %__MODULE__{req | accept_encoding: accept_encoding}
+  def put(
+        %__MODULE__{raw_headers: _raw_headers, headers: headers} = req,
+        :header,
+        name,
+        value
+      )
+      when is_atom(name) do
+    new_headers = Keyword.put(headers, name, value)
+    %__MODULE__{req | headers: new_headers}
   end
 
-  defp parse_header(
-         %__MODULE__{raw_headers: _raw_headers} = req,
-         %{name: "connection", value: connection}
-       ) do
-    %__MODULE__{req | connection: connection}
+  def put(
+        %__MODULE__{raw_headers: _raw_headers, headers: _headers},
+        :header,
+        name,
+        _value
+      )
+      when is_binary(name) do
+    require Logger
+    Logger.debug("Unknown header name: #{name}")
   end
 
-  defp parse_header(
-         %__MODULE__{raw_headers: _raw_headers} = req,
-         %{name: "content-length", value: content_length}
-       ) do
-    %__MODULE__{req | content_length: content_length}
-  end
-
-  defp parse_header(
-         %__MODULE__{raw_headers: _raw_headers} = req,
-         %{name: "content-type", value: content_type}
-       ) do
-    %__MODULE__{req | content_type: content_type}
-  end
-
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{name: "host", value: host}) do
-    %__MODULE__{req | host: host}
-  end
-
-  defp parse_header(%__MODULE__{raw_headers: _raw_headers} = req, %{
-         name: "user-agent",
-         value: user_agent
-       }) do
-    %__MODULE__{req | user_agent: user_agent}
+  def put(%__MODULE__{} = req, key, value) when key in @http_request_keys do
+    struct(req, %{key => value})
   end
 
   def parse_request_line(%__MODULE__{raw_request: raw_request} = req) do
@@ -134,12 +148,12 @@ defmodule Server.HTTPRequest do
     http_version = String.upcase(http_version)
 
     req
-    |> then(&%__MODULE__{&1 | raw_request_line: raw_request_line})
-    |> then(&%__MODULE__{&1 | raw_headers: raw_headers})
-    |> then(&%__MODULE__{&1 | body: body})
-    |> then(&%__MODULE__{&1 | method: method})
-    |> then(&%__MODULE__{&1 | url: url})
-    |> then(&%__MODULE__{&1 | http_version: http_version})
+    |> put(:raw_request_line, raw_request_line)
+    |> put(:raw_headers, raw_headers)
+    |> put(:body, body)
+    |> put(:method, method)
+    |> put(:url, url)
+    |> put(:http_version, http_version)
   end
 end
 
@@ -149,7 +163,7 @@ defmodule Server.HTTPResponse do
     :status_code,
     :status_text,
     body: "",
-    headers: [content_length: 0, connection: "Keep-Alive"],
+    headers: ["content-length": 0, connection: "Keep-Alive"],
     protocol: "HTTP/1.1"
   ]
 
@@ -161,16 +175,16 @@ defmodule Server.HTTPResponse do
     do_put_header(res, :connection, value)
   end
 
-  def put_header(%__MODULE__{} = res, :content_encoding, value) do
-    do_put_header(res, :content_encoding, value)
+  def put_header(%__MODULE__{} = res, :"content-encoding", value) do
+    do_put_header(res, :"content-encoding", value)
   end
 
-  def put_header(%__MODULE__{} = res, :content_length, value) do
-    do_put_header(res, :content_length, value)
+  def put_header(%__MODULE__{} = res, :"content-length", value) do
+    do_put_header(res, :"content-length", value)
   end
 
-  def put_header(%__MODULE__{} = res, :content_type, value) do
-    do_put_header(res, :content_type, value)
+  def put_header(%__MODULE__{} = res, :"content-type", value) do
+    do_put_header(res, :"content-type", value)
   end
 
   def put_header(%__MODULE__{} = res, :date, value) do
@@ -226,15 +240,15 @@ defmodule Server.HTTPResponse do
     "Connection: #{value}"
   end
 
-  defp header_to_string({:content_encoding, value}) do
+  defp header_to_string({:"content-encoding", value}) do
     "Content-Encoding: #{value}"
   end
 
-  defp header_to_string({:content_length, value}) do
+  defp header_to_string({:"content-length", value}) do
     "Content-Length: #{value}"
   end
 
-  defp header_to_string({:content_type, value}) do
+  defp header_to_string({:"content-type", value}) do
     "Content-Type: #{value}"
   end
 
@@ -292,30 +306,40 @@ defmodule Server.RequestHandler do
     end
   end
 
-  defp response(%HTTPRequest{body: _body, connection: connection, method: "GET", url: "/"}) do
+  defp response(%HTTPRequest{body: _body, method: "GET", url: "/"} = req) do
+    connection = HTTPRequest.get(req, :header, :connection)
+
     HTTPResponse.new(200)
     |> HTTPResponse.put_header(:connection, connection)
   end
 
-  defp response(%HTTPRequest{
-         connection: connection,
-         method: "GET",
-         url: "/user-agent",
-         user_agent: user_agent
-       }) do
+  defp response(
+         %HTTPRequest{
+           method: "GET",
+           url: "/user-agent"
+         } = req
+       ) do
+    connection = HTTPRequest.get(req, :header, :connection)
+    user_agent = HTTPRequest.get(req, :header, :"user-agent")
+
     HTTPResponse.new(200)
     |> HTTPResponse.put_body(user_agent)
     |> HTTPResponse.put_header(:connection, connection)
-    |> HTTPResponse.put_header(:content_type, "text/plain")
-    |> HTTPResponse.put_header(:content_length, byte_size(user_agent))
+    |> HTTPResponse.put_header(:"content-type", "text/plain")
+    |> HTTPResponse.put_header(:"content-length", byte_size(user_agent))
   end
 
-  defp response(%HTTPRequest{
-         accept_encoding: accept_encoding,
-         connection: connection,
-         method: "GET",
-         url: "/echo/" <> str
-       }) do
+  defp response(
+         %HTTPRequest{
+           method: "GET",
+           url: "/echo/" <> str
+         } = req
+       ) do
+    connection = HTTPRequest.get(req, :header, :connection)
+
+    accept_encoding =
+      HTTPRequest.get(req, :header, :"accept-encoding")
+
     encodings =
       accept_encoding
       |> String.split(",", trim: true)
@@ -327,24 +351,27 @@ defmodule Server.RequestHandler do
 
         HTTPResponse.new(200)
         |> HTTPResponse.put_body(str_gz)
-        |> HTTPResponse.put_header(:content_length, byte_size(str_gz))
-        |> HTTPResponse.put_header(:content_encoding, "gzip")
+        |> HTTPResponse.put_header(:"content-length", byte_size(str_gz))
+        |> HTTPResponse.put_header(:"content-encoding", "gzip")
       else
         HTTPResponse.new(200)
         |> HTTPResponse.put_body(str)
-        |> HTTPResponse.put_header(:content_length, byte_size(str))
+        |> HTTPResponse.put_header(:"content-length", byte_size(str))
       end
 
     res
     |> HTTPResponse.put_header(:connection, connection)
-    |> HTTPResponse.put_header(:content_type, "text/plain")
+    |> HTTPResponse.put_header(:"content-type", "text/plain")
   end
 
-  defp response(%HTTPRequest{
-         connection: connection,
-         method: "GET",
-         url: "/files/" <> filename
-       }) do
+  defp response(
+         %HTTPRequest{
+           method: "GET",
+           url: "/files/" <> filename
+         } = req
+       ) do
+    connection = HTTPRequest.get(req, :header, :connection)
+
     directory = Application.get_env(:codecrafters_http_server, :directory)
     file_path = Path.join(directory, filename)
 
@@ -353,8 +380,8 @@ defmodule Server.RequestHandler do
         {:ok, body} ->
           HTTPResponse.new(200)
           |> HTTPResponse.put_body(body)
-          |> HTTPResponse.put_header(:content_type, "application/octet-stream")
-          |> HTTPResponse.put_header(:content_length, byte_size(body))
+          |> HTTPResponse.put_header(:"content-type", "application/octet-stream")
+          |> HTTPResponse.put_header(:"content-length", byte_size(body))
 
         {:error, :enoent} ->
           HTTPResponse.new(404)
@@ -364,12 +391,15 @@ defmodule Server.RequestHandler do
     |> HTTPResponse.put_header(:connection, connection)
   end
 
-  defp response(%HTTPRequest{
-         body: body,
-         connection: connection,
-         method: "POST",
-         url: "/files/" <> filename
-       }) do
+  defp response(
+         %HTTPRequest{
+           body: body,
+           method: "POST",
+           url: "/files/" <> filename
+         } = req
+       ) do
+    connection = HTTPRequest.get(req, :header, :connection)
+
     directory = Application.get_env(:codecrafters_http_server, :directory)
     file_path = Path.join(directory, filename)
 
@@ -380,7 +410,9 @@ defmodule Server.RequestHandler do
     |> HTTPResponse.put_header(:connection, connection)
   end
 
-  defp response(%HTTPRequest{connection: connection}) do
+  defp response(%HTTPRequest{} = req) do
+    connection = HTTPRequest.get(req, :header, :connection)
+
     HTTPResponse.new(404)
     |> HTTPResponse.put_header(:connection, connection)
   end

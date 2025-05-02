@@ -161,41 +161,42 @@ defmodule Server.HTTPRequest do
 end
 
 defmodule Server.HTTPResponse do
+  @accepted_header_names ~w[
+    connection
+    content-encoding
+    content-length
+    content-type
+    date
+  ]a
+
+  @http_response_keys ~w[
+    status_code
+    status_text
+    body
+    headers
+    protocol
+  ]a
   @enforce_keys ~w[status_code status_text]a
-  defstruct [
-    :status_code,
-    :status_text,
-    body: "",
-    headers: ["content-length": 0, connection: "Keep-Alive"],
-    protocol: "HTTP/1.1"
-  ]
+  defstruct @http_response_keys
 
-  def put_body(%__MODULE__{} = res, body) when is_binary(body) do
-    %__MODULE__{res | body: body}
+  def put(%__MODULE__{} = res, key, value) when key in @http_response_keys do
+    struct(res, %{key => value})
   end
 
-  def put_header(%__MODULE__{} = res, :connection, value) do
-    do_put_header(res, :connection, value)
-  end
-
-  def put_header(%__MODULE__{} = res, :"content-encoding", value) do
-    do_put_header(res, :"content-encoding", value)
-  end
-
-  def put_header(%__MODULE__{} = res, :"content-length", value) do
-    do_put_header(res, :"content-length", value)
-  end
-
-  def put_header(%__MODULE__{} = res, :"content-type", value) do
-    do_put_header(res, :"content-type", value)
-  end
-
-  def put_header(%__MODULE__{} = res, :date, value) do
-    do_put_header(res, :date, value)
+  def put(%__MODULE__{headers: headers} = res, :header, name, value)
+      when name in @accepted_header_names do
+    new_headers = Keyword.put(headers, name, value)
+    %__MODULE__{res | headers: new_headers}
   end
 
   def new(status_code) when is_integer(status_code) do
-    %__MODULE__{status_code: status_code, status_text: status_text(status_code)}
+    %__MODULE__{
+      status_code: status_code,
+      status_text: status_text(status_code),
+      body: "",
+      headers: ["content-length": 0, connection: "Keep-Alive"],
+      protocol: "HTTP/1.1"
+    }
   end
 
   def status_text(status_code) when is_integer(status_code) do
@@ -204,11 +205,6 @@ defmodule Server.HTTPResponse do
       201 => "Created",
       404 => "Not Found"
     }[status_code]
-  end
-
-  defp do_put_header(%__MODULE__{headers: headers} = res, key, value) do
-    new_headers = Keyword.put(headers, key, value)
-    %__MODULE__{res | headers: new_headers}
   end
 
   def to_string(%__MODULE__{
@@ -313,7 +309,7 @@ defmodule Server.RequestHandler do
     connection = HTTPRequest.get(req, :header, :connection)
 
     HTTPResponse.new(200)
-    |> HTTPResponse.put_header(:connection, connection)
+    |> HTTPResponse.put(:header, :connection, connection)
   end
 
   defp response(
@@ -326,10 +322,10 @@ defmodule Server.RequestHandler do
     user_agent = HTTPRequest.get(req, :header, :"user-agent")
 
     HTTPResponse.new(200)
-    |> HTTPResponse.put_body(user_agent)
-    |> HTTPResponse.put_header(:connection, connection)
-    |> HTTPResponse.put_header(:"content-type", "text/plain")
-    |> HTTPResponse.put_header(:"content-length", byte_size(user_agent))
+    |> HTTPResponse.put(:body, user_agent)
+    |> HTTPResponse.put(:header, :connection, connection)
+    |> HTTPResponse.put(:header, :"content-type", "text/plain")
+    |> HTTPResponse.put(:header, :"content-length", byte_size(user_agent))
   end
 
   defp response(
@@ -353,18 +349,18 @@ defmodule Server.RequestHandler do
         str_gz = :zlib.gzip(str)
 
         HTTPResponse.new(200)
-        |> HTTPResponse.put_body(str_gz)
-        |> HTTPResponse.put_header(:"content-length", byte_size(str_gz))
-        |> HTTPResponse.put_header(:"content-encoding", "gzip")
+        |> HTTPResponse.put(:body, str_gz)
+        |> HTTPResponse.put(:header, :"content-length", byte_size(str_gz))
+        |> HTTPResponse.put(:header, :"content-encoding", "gzip")
       else
         HTTPResponse.new(200)
-        |> HTTPResponse.put_body(str)
-        |> HTTPResponse.put_header(:"content-length", byte_size(str))
+        |> HTTPResponse.put(:body, str)
+        |> HTTPResponse.put(:header, :"content-length", byte_size(str))
       end
 
     res
-    |> HTTPResponse.put_header(:connection, connection)
-    |> HTTPResponse.put_header(:"content-type", "text/plain")
+    |> HTTPResponse.put(:header, :connection, connection)
+    |> HTTPResponse.put(:header, :"content-type", "text/plain")
   end
 
   defp response(
@@ -382,16 +378,16 @@ defmodule Server.RequestHandler do
       case File.read(file_path) do
         {:ok, body} ->
           HTTPResponse.new(200)
-          |> HTTPResponse.put_body(body)
-          |> HTTPResponse.put_header(:"content-type", "application/octet-stream")
-          |> HTTPResponse.put_header(:"content-length", byte_size(body))
+          |> HTTPResponse.put(:body, body)
+          |> HTTPResponse.put(:header, :"content-type", "application/octet-stream")
+          |> HTTPResponse.put(:header, :"content-length", byte_size(body))
 
         {:error, :enoent} ->
           HTTPResponse.new(404)
       end
 
     res
-    |> HTTPResponse.put_header(:connection, connection)
+    |> HTTPResponse.put(:header, :connection, connection)
   end
 
   defp response(
@@ -410,14 +406,14 @@ defmodule Server.RequestHandler do
     File.write(file_path, body)
 
     HTTPResponse.new(201)
-    |> HTTPResponse.put_header(:connection, connection)
+    |> HTTPResponse.put(:header, :connection, connection)
   end
 
   defp response(%HTTPRequest{} = req) do
     connection = HTTPRequest.get(req, :header, :connection)
 
     HTTPResponse.new(404)
-    |> HTTPResponse.put_header(:connection, connection)
+    |> HTTPResponse.put(:header, :connection, connection)
   end
 end
 

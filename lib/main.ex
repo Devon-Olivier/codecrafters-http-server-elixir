@@ -49,6 +49,9 @@ defmodule Server.HTTPListener do
 end
 
 defmodule Server.HTTPRequest do
+  # TODO: consider structuring HTTP request as described in the literature.
+  # To do this include HTTPRequest.Head module
+
   @enforce_keys ~w[raw_request]a
   @http_request_keys [
     :body,

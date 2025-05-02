@@ -153,6 +153,10 @@ defmodule Server.HTTPResponse do
     protocol: "HTTP/1.1"
   ]
 
+  def put_body(%__MODULE__{} = res, body) when is_binary(body) do
+    %__MODULE__{res | body: body}
+  end
+
   def put_header(%__MODULE__{} = res, :connection, value) do
     do_put_header(res, :connection, value)
   end
@@ -291,10 +295,10 @@ defmodule Server.RequestHandler do
          user_agent: user_agent
        }) do
     %HTTPResponse{
-      body: user_agent,
       status_code: 200,
       status_text: "OK"
     }
+    |> HTTPResponse.put_body(user_agent)
     |> HTTPResponse.put_header(:connection, connection)
     |> HTTPResponse.put_header(:content_type, "text/plain")
     |> HTTPResponse.put_header(:content_length, byte_size(user_agent))
@@ -316,18 +320,18 @@ defmodule Server.RequestHandler do
         str_gz = :zlib.gzip(str)
 
         %HTTPResponse{
-          body: str_gz,
           status_code: 200,
           status_text: "OK"
         }
+        |> HTTPResponse.put_body(str_gz)
         |> HTTPResponse.put_header(:content_length, byte_size(str_gz))
         |> HTTPResponse.put_header(:content_encoding, "gzip")
       else
         %HTTPResponse{
-          body: str,
           status_code: 200,
           status_text: "OK"
         }
+        |> HTTPResponse.put_body(str)
         |> HTTPResponse.put_header(:content_length, byte_size(str))
       end
 
@@ -348,10 +352,10 @@ defmodule Server.RequestHandler do
       case File.read(file_path) do
         {:ok, body} ->
           %HTTPResponse{
-            body: body,
             status_code: 200,
             status_text: "OK"
           }
+          |> HTTPResponse.put_body(body)
           |> HTTPResponse.put_header(:content_type, "application/octet-stream")
           |> HTTPResponse.put_header(:content_length, byte_size(body))
 

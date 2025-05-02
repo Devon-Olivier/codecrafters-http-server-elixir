@@ -53,20 +53,16 @@ defmodule Server.HTTPRequest do
   # To do this include HTTPRequest.Head module
 
   @enforce_keys ~w[raw_request]a
-  @http_request_keys [
-    :body,
-    :http_version,
-    :method,
-    :raw_headers,
-    :raw_request,
-    :raw_request_line,
-    :url,
-    headers: [
-      "accept-encoding": "",
-      connection: "Keep-Alive",
-      "content-length": 0
-    ]
-  ]
+  @http_request_keys ~w[
+    body
+    http_version
+    method
+    raw_headers
+    raw_request
+    raw_request_line
+    url
+    headers
+  ]a
 
   defstruct @http_request_keys
 
@@ -87,7 +83,12 @@ defmodule Server.HTTPRequest do
   def new(raw_request) do
     %__MODULE__{
       body: "",
-      raw_request: raw_request
+      raw_request: raw_request,
+      headers: [
+        "accept-encoding": "",
+        connection: "Keep-Alive",
+        "content-length": 0
+      ]
     }
   end
 
@@ -293,7 +294,7 @@ defmodule Server.RequestHandler do
     # TODO: handle errors
 
     req =
-      %HTTPRequest{raw_request: raw_request}
+      HTTPRequest.new(raw_request)
       |> HTTPRequest.parse_request_line()
       |> HTTPRequest.parse_headers()
 
